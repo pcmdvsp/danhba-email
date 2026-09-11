@@ -11,13 +11,12 @@ export function createApp({password=process.env.APP_PASSWORD,secret=process.env.
   if(!password||password.length<12||!secret||secret.length<32) throw Error('Cần APP_PASSWORD ít nhất 12 ký tự và SESSION_SECRET ít nhất 32 ký tự.');
   const app=express(),uploads=new Map(),jobs=new Map(),queue=[];
   let working=false;
-  const production=process.env.NODE_ENV==='production';
-  app.set('trust proxy',production?1:false);app.disable('x-powered-by');
-  app.use(helmet({strictTransportSecurity:production?undefined:false,contentSecurityPolicy:{directives:{upgradeInsecureRequests:production?[]:null}}}));
+  app.set('trust proxy',false);app.disable('x-powered-by');
+  app.use(helmet({strictTransportSecurity:false,contentSecurityPolicy:{directives:{upgradeInsecureRequests:null}}}));
   app.get('/health',(req,res)=>res.json({ok:true,app:'danhba-email'}));
   app.use(express.json({limit:'10kb'}));
   const store=new session.MemoryStore();
-  app.use(session({store,secret,resave:false,saveUninitialized:false,cookie:{httpOnly:true,sameSite:'strict',secure:process.env.NODE_ENV==='production',maxAge:8*3600_000}}));
+  app.use(session({store,secret,resave:false,saveUninitialized:false,cookie:{httpOnly:true,sameSite:'strict',secure:false,maxAge:8*3600_000}}));
   app.use((req,res,next)=>{res.set('Cache-Control','no-store');if(req.method==='POST'&&req.get('X-Requested-With')!=='danhba-app')return res.status(403).json({error:'Yêu cầu không hợp lệ.'});next();});
   app.post('/api/login',rateLimit({windowMs:15*60_000,limit:10,standardHeaders:true,legacyHeaders:false,message:{error:'Thử đăng nhập quá nhiều lần. Hãy chờ 15 phút.'}}),(req,res)=>{
     const hash=x=>createHash('sha256').update(String(x)).digest();
@@ -45,7 +44,7 @@ export function createApp({password=process.env.APP_PASSWORD,secret=process.env.
         let result;
         if(!name)result={email:'',status:'Thiếu họ tên',detail:''};
         else try{const key=JSON.stringify([name,staffId]);if(cache.has(key))result=cache.get(key);else{result=await lookupFn(name,unit,staffId);cache.set(key,result);await new Promise(r=>setTimeout(r,delay));}errors=0;}
-        catch(e){errors++;job.hadErrors=true;console.error('DIRECTORY_LOOKUP_ERROR',JSON.stringify({message:e.message,cause:e.cause?.message,code:e.cause?.code}));result={email:'',status:'Lỗi kết nối danh bạ',detail:'Không truy cập/đọc được danh bạ. Hãy thử lại; nếu chạy cloud, cần kiểm tra khả năng truy cập mạng.'};}
+        catch(e){errors++;job.hadErrors=true;console.error('DIRECTORY_LOOKUP_ERROR',JSON.stringify({message:e.message,cause:e.cause?.message,code:e.cause?.code}));result={email:'',status:'Lỗi kết nối danh bạ',detail:'Không truy cập/đọc được danh bạ từ máy đang chạy ứng dụng. Hãy kiểm tra kết nối mạng rồi thử lại.'};}
         job.results.push({...result,name,checkedAt:new Date().toISOString()});job.updated=Date.now();
         if(errors>=3){job.error='Dừng sau 3 lỗi liên tiếp. Bạn có thể tải kết quả đã xử lý.';job.state='failed';break;}
       }
@@ -71,7 +70,8 @@ export function createApp({password=process.env.APP_PASSWORD,secret=process.env.
     if(!Number.isInteger(resultIndex)||resultIndex<0||resultIndex>=req.job.results.length||!Number.isInteger(candidateIndex))return res.status(400).json({error:'Lựa chọn không hợp lệ.'});
     const current=req.job.results[resultIndex],chosen=current.candidates?.[candidateIndex];
     if(!current.needsSelection||!chosen)return res.status(409).json({error:'Kết quả này không còn cần lựa chọn.'});
-    req.job.results[resultIndex]={...selectCandidate(chosen),name:current.name,checkedAt:current.checkedAt};
+    const selected=current.inputStaffId&&!chosen.staffId?{...chosen,staffId:current.inputStaffId}:chosen;
+    req.job.results[resultIndex]={...selectCandidate(selected),name:current.name,checkedAt:current.checkedAt};
     req.job.updated=Date.now();
     res.json({ok:true,result:req.job.results[resultIndex]});
   });
@@ -84,4 +84,4 @@ export function createApp({password=process.env.APP_PASSWORD,secret=process.env.
   const timer=setInterval(()=>{const now=Date.now();for(const [id,u]of uploads)if(now-u.time>3600_000)uploads.delete(id);for(const[id,j]of jobs)if(!['running','queued'].includes(j.state)&&now-j.updated>3600_000)jobs.delete(id);store.all((err,sessions)=>{if(!err)for(const[id,s]of Object.entries(sessions))if(new Date(s.cookie.expires).getTime()<now)store.destroy(id);});},60000);timer.unref();
   return app;
 }
-if(process.argv[1]===fileURLToPath(import.meta.url))createApp().listen(process.env.PORT||8000,process.env.HOST||'0.0.0.0',()=>console.log('Danh bạ app sẵn sàng tại cổng '+(process.env.PORT||8000)));
+if(process.argv[1]===fileURLToPath(import.meta.url))createApp().listen(process.env.PORT||8000,process.env.HOST||'127.0.0.1',()=>console.log('Danh bạ app sẵn sàng tại http://localhost:'+(process.env.PORT||8000)));

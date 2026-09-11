@@ -19,9 +19,9 @@ export function parseResults(html) {
     const cells=$(e).children('td').map((j,c)=>clean($(c).text())).get();
     return {
       name:clean(`${cells[familyNameIndex]||''} ${cells[givenNameIndex]||''}`),
-      // The live directory currently returns two hidden columns named "Danh số".
-      // Some employees have a blank value in the first but a populated site ID in the second.
-      staffId:staffIdIndexes.map(index=>cells[index]||'').find(Boolean)||'',
+      // The directory exposes two columns named "Danh số". The first is the
+      // employee ID; the second is an internal record key used by CellClick.
+      staffId:staffIdIndexes.length?cells[staffIdIndexes[0]]||'':'',
       unit:unitIndex>=0?cells[unitIndex]||'':'',
       department:departmentIndex>=0?cells[departmentIndex]||'':'',
       role:roleIndex>=0?cells[roleIndex]||'':'',
@@ -45,10 +45,11 @@ export function selectCandidate(row,status='Đã chọn người phù hợp') {
 
 export function matchResults(rows,name,staffId='') {
   const exact=rows.map(candidate).filter(row=>norm(row.name)===norm(name));
-  if(!exact.length) return {email:'',status:rows.length?'Cần kiểm tra họ tên':'Không tìm thấy',detail:rows.map(candidateDetail).join('\n')};
-  if(exact.length===1) return selectCandidate(exact[0],'Khớp họ tên');
-
   const id=clean(staffId);
+  const withFallbackId=row=>id&&!row.staffId?{...row,staffId:id}:row;
+  if(!exact.length) return {email:'',status:rows.length?'Cần kiểm tra họ tên':'Không tìm thấy',detail:rows.map(candidateDetail).join('\n')};
+  if(exact.length===1) return selectCandidate(withFallbackId(exact[0]),'Khớp họ tên');
+
   if(id){
     const idMatches=exact.filter(row=>norm(row.staffId)===norm(id));
     if(idMatches.length===1) return selectCandidate(idMatches[0],'Khớp họ tên và danh số');
@@ -58,7 +59,8 @@ export function matchResults(rows,name,staffId='') {
     status:id?'Danh số chưa xác định duy nhất — vui lòng chọn':'Trùng họ tên — vui lòng chọn',
     detail:exact.map(candidateDetail).join('\n'),
     needsSelection:true,
-    candidates:exact
+    candidates:exact,
+    inputStaffId:id
   };
 }
 

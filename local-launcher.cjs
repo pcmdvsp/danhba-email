@@ -13,7 +13,7 @@ async function main(){
  try{const response=await fetch(url,{signal:AbortSignal.timeout(1500)});const result=await response.json();if(result.app==='danhba-email')existing=true;else throw Error('Cổng đang được ứng dụng khác dùng.');}catch(e){if(e.message.includes('Cổng'))throw e;}
  if(!existing){
   const log=fs.openSync(path.join(runtime,'server.log'),'a');
-  const child=spawn(process.execPath,[path.join(root,'server.js')],{cwd:root,env:{...process.env,...config,NODE_ENV:'development'},detached:true,windowsHide:true,stdio:['ignore',log,log]});
+  const child=spawn(process.execPath,[path.join(root,'server.js')],{cwd:root,env:{...process.env,...config},detached:true,windowsHide:true,stdio:['ignore',log,log]});
   child.on('error',e=>{console.error(e.message);process.exitCode=1;});
   child.unref();fs.closeSync(log);
   if(child.pid)fs.writeFileSync(path.join(runtime,'process.json'),JSON.stringify({pid:child.pid,started:new Date().toISOString()}));

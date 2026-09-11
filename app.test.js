@@ -16,11 +16,12 @@ test('Matching starts with name and uses staff ID only for namesakes',()=>{
  assert.equal(clean('  Nguyễn\u200b   Văn A '),row.name);
  assert.throws(()=>parseResults('<html>Login</html>'));
 });
-test('Directory parser falls back to the second site employee ID',()=>{
+test('Directory parser ignores the internal record key column',()=>{
  const html=`<table id="ctl00_ContentPlaceHolder1_RadGrid1_ctl00"><tr><th>Họ đệm</th><th>Tên</th><th>E-mail</th><th>Danh số</th><th>Danh số</th></tr><tr class="rgRow"><td>Nguyễn Văn</td><td>Hoan</td><td>hoan@vietsov.com.vn</td><td>&nbsp;</td><td>12917</td></tr><tr class="rgAltRow"><td>Nguyễn Văn</td><td>Khanh</td><td>khanh@vietsov.com.vn</td><td>XL2474</td><td>19278</td></tr></table>`;
  const rows=parseResults(html);
- assert.equal(rows[0].staffId,'12917');
+ assert.equal(rows[0].staffId,'');
  assert.equal(rows[1].staffId,'XL2474');
+ assert.equal(matchResults([rows[0]],rows[0].name,'14003').selected.staffId,'14003');
 });
 test('Login, duplicate selection, export gate and isolation',async()=>{
  const candidates=[{name:'Nguyễn Văn A',staffId:'1001',unit:'A',email:'first@vietsov.com.vn'},{name:'Nguyễn Văn A',staffId:'1002',unit:'B',email:'second@vietsov.com.vn'}];
